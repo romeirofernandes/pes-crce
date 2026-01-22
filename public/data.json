@@ -1,0 +1,50 @@
+{
+  "players": [
+    { "id": "p1", "name": "Neymar" },
+    { "id": "p2", "name": "Mbappé" },
+    { "id": "p3", "name": "Vinicius Jr" },
+    { "id": "p4", "name": "Rodrygo" }
+  ],
+  "format": "1v1",
+  "teams": [],
+  "matches": [
+    {
+      "id": "m1",
+      "home": "p1",
+      "away": "p2",
+      "homeScore": 3,
+      "awayScore": 1,
+      "completed": true,
+      "date": "2024-01-15"
+    },
+    {
+      "id": "m2",
+      "home": "p3",
+      "away": "p4",
+      "homeScore": 2,
+      "awayScore": 2,
+      "completed": true,
+      "date": "2024-01-16"
+    }
+  ],
+  "fixtures": [
+    {
+      "id": "f1",
+      "home": "p1",
+      "away": "p3",
+      "homeScore": null,
+      "awayScore": null,
+      "completed": false,
+      "date": "2024-01-20"
+    },
+    {
+      "id": "f2",
+      "home": "p2",
+      "away": "p4",
+      "homeScore": null,
+      "awayScore": null,
+      "completed": false,
+      "date": "2024-01-21"
+    }
+  ]
+}
