@@ -34,7 +34,7 @@ const Dashboard = () => {
             <Badge variant="outline" className="text-lg px-4 py-2">{viewFormat}</Badge>
             </div>
             
-            <Tabs value={viewFormat} onValueChange={setViewFormat} className="w-full sm:w-[400px]">
+            <Tabs value={viewFormat} onValueChange={setViewFormat} className="w-full sm:w-100">
                 <TabsList className="grid w-full grid-cols-2">
                     <TabsTrigger value="1v1">1v1 Tournament</TabsTrigger>
                     <TabsTrigger value="2v2">2v2 Tournament</TabsTrigger>

@@ -1,8 +1,16 @@
+import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import Dashboard from './pages/Dashboard'
 import Admin from './pages/Admin'
+import { useTournamentStore } from './store/tournamentStore'
 
 function App() {
+  const initialize = useTournamentStore((state) => state.initialize)
+
+  useEffect(() => {
+    initialize()
+  }, [initialize])
+
   return (
     <BrowserRouter>
       <div className="flex flex-col min-h-screen bg-background">

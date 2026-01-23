@@ -1,137 +1,135 @@
 import { create } from 'zustand'
+import { db } from '../lib/firebase'
+import { doc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore'
 
-const STORAGE_KEY = 'tournament-data'
+const TOURNAMENT_DOC = doc(db, 'tournaments', 'crce-tournament')
 
-const loadInitialData = () => {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    return stored ? JSON.parse(stored) : getDefaultData()
-  } catch {
-    return getDefaultData()
-  }
+// Helpers for Firestore (handling nested arrays)
+const dehydrateBracket = (bracket) => {
+  if (!bracket) return null
+  const roundsMap = {}
+  bracket.rounds.forEach((round, idx) => {
+    roundsMap[idx] = round
+  })
+  return { ...bracket, rounds: roundsMap }
 }
 
-const getDefaultData = () => ({
-  players: [
-    { id: 'p1', name: 'Neymar' },
-    { id: 'p2', name: 'Mbappé' },
-    { id: 'p3', name: 'Vinicius Jr' },
-    { id: 'p4', name: 'Rodrygo' },
-    { id: 'p5', name: 'Haaland' },
-    { id: 'p6', name: 'De Bruyne' },
-    { id: 'p7', name: 'Salah' },
-    { id: 'p8', name: 'Benzema' },
-  ],
-  activeFormat: '1v1',
-  teams: [],
-  brackets: {
-    '1v1': null,
-    '2v2': null
-  }
-})
+const hydrateBracket = (bracket) => {
+  if (!bracket) return null
+  if (Array.isArray(bracket.rounds)) return bracket
+  
+  const rounds = Object.keys(bracket.rounds)
+    .sort((a, b) => Number(a) - Number(b))
+    .map(k => bracket.rounds[k])
+  
+  return { ...bracket, rounds }
+}
 
 export const useTournamentStore = create((set, get) => ({
-  data: loadInitialData(),
+  data: {
+    players: [],
+    teams: [],
+    brackets: { '1v1': null, '2v2': null },
+    activeFormat: '1v1',
+  },
 
-  addPlayer: (name) => {
-    set((state) => {
-      const newData = {
-        ...state.data,
-        players: [...state.data.players, { id: `p${Date.now()}`, name }],
-        brackets: {
-          ...state.data.brackets,
-          '1v1': null // Invalidate 1v1 bracket
+  // Initialize: Subscribe to Firestore updates
+  initialize: () => {
+    // Return the unsubscribe function so we can clean up if needed (though usually global store lives forever)
+    const unsubscribe = onSnapshot(TOURNAMENT_DOC, (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        const serverBrackets = data.brackets || { '1v1': null, '2v2': null }
+        // Ensure defaults if fields are missing in legacy docs
+        set({ 
+            data: {
+                players: data.players || [],
+                teams: data.teams || [],
+                brackets: {
+                  '1v1': hydrateBracket(serverBrackets['1v1']),
+                  '2v2': hydrateBracket(serverBrackets['2v2'])
+                },
+                activeFormat: data.activeFormat || '1v1'
+            } 
+        })
+      } else {
+        // Create the document if it doesn't exist
+        const initialData = {
+          players: [],
+          teams: [],
+          brackets: { '1v1': null, '2v2': null },
+          activeFormat: '1v1',
         }
+        setDoc(TOURNAMENT_DOC, initialData)
+        set({ data: initialData })
       }
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(newData))
-      return { data: newData }
-    })
+    }, (error) => {
+      console.error("Error fetching tournament data:", error);
+    });
+    
+    return unsubscribe;
   },
 
-  removePlayer: (playerId) => {
-    set((state) => {
-      const newData = {
-        ...state.data,
-        players: state.data.players.filter((p) => p.id !== playerId),
-        brackets: {
-          ...state.data.brackets,
-          '1v1': null
-        }
-      }
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(newData))
-      return { data: newData }
-    })
+  setFormat: async (format) => {
+    // Firestore local cache update
+    await setDoc(TOURNAMENT_DOC, { activeFormat: format }, { merge: true })
   },
 
-  setFormat: (format) => {
-    set((state) => {
-      const newData = {
-        ...state.data,
-        activeFormat: format,
-      }
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(newData))
-      return { data: newData }
-    })
+  addPlayer: async (name) => {
+    const state = get()
+    const newPlayer = { id: `p${Date.now()}`, name }
+    const updatedPlayers = [...state.data.players, newPlayer]
+    await updateDoc(TOURNAMENT_DOC, { players: updatedPlayers })
   },
 
-  addTeam: (playerIds) => {
-    set((state) => {
-      const newTeam = {
-        id: `team${Date.now()}`,
-        players: playerIds,
-      }
-      const newData = {
-        ...state.data,
-        teams: [...state.data.teams, newTeam],
-        brackets: {
-          ...state.data.brackets,
-          '2v2': null // Invalidate 2v2 bracket
-        }
-      }
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(newData))
-      return { data: newData }
-    })
+  removePlayer: async (playerId) => {
+    const state = get()
+    const updatedPlayers = state.data.players.filter((p) => p.id !== playerId)
+    await updateDoc(TOURNAMENT_DOC, { players: updatedPlayers })
   },
 
-  removeTeam: (teamId) => {
-    set((state) => {
-      const newData = {
-        ...state.data,
-        teams: state.data.teams.filter((t) => t.id !== teamId),
-        brackets: {
-          ...state.data.brackets,
-          '2v2': null
-        }
-      }
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(newData))
-      return { data: newData }
-    })
+  addTeam: async (name, playerIds) => {
+    const state = get()
+    const newTeam = {
+      id: `team${Date.now()}`,
+      name,
+      players: playerIds,
+    }
+    const updatedTeams = [...state.data.teams, newTeam]
+    await updateDoc(TOURNAMENT_DOC, { teams: updatedTeams })
   },
 
-  resetTournament: () => {
-    set((state) => {
-      const format = state.data.activeFormat
-      const newData = {
-        ...state.data,
-        brackets: {
-          ...state.data.brackets,
-          [format]: null
-        }
-      }
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(newData))
-      return { data: newData }
-    })
+  removeTeam: async (teamId) => {
+    const state = get()
+    const updatedTeams = state.data.teams.filter((t) => t.id !== teamId)
+    await updateDoc(TOURNAMENT_DOC, { teams: updatedTeams })
   },
 
-  generateBracket: () => {
+  resetTournament: async () => {
+    const state = get()
+    const format = state.data.activeFormat
+    const newBracketsState = {
+      ...state.data.brackets,
+      [format]: null
+    }
+
+    const bracketsToSave = {
+      '1v1': dehydrateBracket(newBracketsState['1v1']),
+      '2v2': dehydrateBracket(newBracketsState['2v2'])
+    }
+    
+    await updateDoc(TOURNAMENT_DOC, { brackets: bracketsToSave })
+  },
+
+  generateBracket: async () => {
     const state = get()
     const { teams, activeFormat, players } = state.data
 
-    // For 1v1, automatically create teams from players
     let competitors
     if (activeFormat === '1v1') {
       competitors = players.map(player => ({
         id: player.id,
+        name: player.name, // Ensure name is preserved
         players: [player.id],
       }))
     } else {
@@ -145,7 +143,7 @@ export const useTournamentStore = create((set, get) => ({
       matchMap: {},
     }
 
-    // Shuffle competitors for fairness
+    // Shuffle competitors
     let currentStageSources = [...competitors].sort(() => Math.random() - 0.5).map(c => ({ 
       id: c.id, 
       type: 'competitor' 
@@ -202,7 +200,6 @@ export const useTournamentStore = create((set, get) => ({
             nextMatchSlot: null,
           }
 
-          // If it's a bye from a previous match (Winner of match X gets a bye), we can't set winner yet.
           if (homeSource.type === 'match') {
              match.completed = false
              match.winner = null
@@ -217,7 +214,6 @@ export const useTournamentStore = create((set, get) => ({
       bracket.rounds.push(roundMatches)
       
       // Link previous round matches to current matches
-      // Look at the round we just created, and update the "nextMatchId" of the sources in the PREVIOUS round
       if (roundIdx > 0) {
         const prevRound = bracket.rounds[roundIdx - 1]
         
@@ -251,46 +247,46 @@ export const useTournamentStore = create((set, get) => ({
       })
     })
 
-    set((state) => {
-      const format = state.data.activeFormat
-      const newData = {
-        ...state.data,
-        brackets: {
-          ...state.data.brackets,
-          [format]: bracket
-        }
-      }
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(newData))
-      return { data: newData }
-    })
+    const newBracketsState = {
+      ...state.data.brackets,
+      [activeFormat]: bracket
+    }
+    
+    const bracketsToSave = {
+      '1v1': dehydrateBracket(newBracketsState['1v1']),
+      '2v2': dehydrateBracket(newBracketsState['2v2'])
+    }
+
+    await updateDoc(TOURNAMENT_DOC, { brackets: bracketsToSave })
   },
 
-  updateMatch: (roundIdx, matchIdx, homeScore, awayScore) => {
-    set((state) => {
-      const format = state.data.activeFormat
-      const currentBracket = state.data.brackets[format]
+  updateMatch: async (roundIdx, matchIdx, homeScore, awayScore) => {
+    const state = get()
+    const format = state.data.activeFormat
+    const currentBracket = state.data.brackets[format]
 
-      if (!currentBracket) return state
+    if (!currentBracket) return
 
-      const bracket = JSON.parse(JSON.stringify(currentBracket))
-      if (!bracket.rounds[roundIdx] || !bracket.rounds[roundIdx][matchIdx]) return state
+    // Deep copy to avoid mutating state directly
+    const bracket = JSON.parse(JSON.stringify(currentBracket))
+    if (!bracket.rounds[roundIdx] || !bracket.rounds[roundIdx][matchIdx]) return
 
-      const match = bracket.rounds[roundIdx][matchIdx]
+    const match = bracket.rounds[roundIdx][matchIdx]
 
-      match.homeScore = homeScore
-      match.awayScore = awayScore
-      match.completed = true
+    match.homeScore = homeScore
+    match.awayScore = awayScore
+    match.completed = true
 
-      // Determine winner
-      if (homeScore > awayScore) {
-        match.winner = match.home
-      } else if (awayScore > homeScore) {
-        match.winner = match.away
-      } else {
-        match.winner = match.home // Default to home team in case of draw
-      }
+    // Determine winner
+    if (homeScore > awayScore) {
+      match.winner = match.home
+    } else if (awayScore > homeScore) {
+      match.winner = match.away
+    } else {
+      match.winner = match.home // Default to home team in case of draw
+    }
 
-      const propagateWinner = (currentMatch, currentRoundIdx) => {
+    const propagateWinner = (currentMatch, currentRoundIdx) => {
          if (!currentMatch.nextMatchId) return;
 
          const nextRoundIdx = currentRoundIdx + 1;
@@ -322,32 +318,18 @@ export const useTournamentStore = create((set, get) => ({
          }
       }
 
-      propagateWinner(match, roundIdx);
+    propagateWinner(match, roundIdx);
 
-      const newData = {
-        ...state.data,
-        brackets: {
-          ...state.data.brackets,
-          [format]: bracket
-        }
-      }
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(newData))
-      return { data: newData }
-    })
-  },
-
-  resetTournament: () => {
-    set((state) => {
-      const format = state.data.activeFormat
-      const newData = {
-        ...state.data,
-        brackets: {
-          ...state.data.brackets,
-          [format]: null
-        }
-      }
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(newData))
-      return { data: newData }
-    })
-  },
+    const newBracketsState = {
+      ...state.data.brackets,
+      [format]: bracket
+    }
+    
+    const bracketsToSave = {
+      '1v1': dehydrateBracket(newBracketsState['1v1']),
+      '2v2': dehydrateBracket(newBracketsState['2v2'])
+    }
+    
+    await updateDoc(TOURNAMENT_DOC, { brackets: bracketsToSave })
+  }
 }))

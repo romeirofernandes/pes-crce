@@ -426,13 +426,13 @@ const Admin = () => {
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                  <AlertDialogTitle className="text-foreground">Are you absolutely sure?</AlertDialogTitle>
                   <AlertDialogDescription>
                     This will permanently reset the {activeFormat} tournament to default state. Players will remain, but bracket data will be lost. This action cannot be undone.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogCancel className="text-foreground">Cancel</AlertDialogCancel>
                   <AlertDialogAction
                     onClick={() => {
                       resetTournament()
