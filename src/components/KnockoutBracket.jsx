@@ -119,9 +119,7 @@ const KnockoutBracket = ({ readOnly = false, formatOverride }) => {
                 {getRoundName(roundIdx)}
               </Badge>
 
-              <div className="flex flex-col justify-around gap-6" style={{ 
-                minHeight: roundIdx === 0 ? 'auto' : `${Math.pow(2, roundIdx) * 120}px` 
-              }}>
+              <div className="flex flex-col justify-around gap-6 h-full">
                 {round.map((match, matchIdx) => {
                   const isEditing =
                     editingMatch?.roundIdx === roundIdx &&
@@ -161,6 +159,7 @@ const KnockoutBracket = ({ readOnly = false, formatOverride }) => {
                               onClick={(e) => e.stopPropagation()}
                               autoFocus
                               placeholder="0"
+                              className="mt-2"
                             />
                           </div>
 
@@ -176,6 +175,7 @@ const KnockoutBracket = ({ readOnly = false, formatOverride }) => {
                               onChange={(e) => setScores({ ...scores, away: e.target.value })}
                               onClick={(e) => e.stopPropagation()}
                               placeholder="0"
+                              className="mt-2"
                             />
                           </div>
 

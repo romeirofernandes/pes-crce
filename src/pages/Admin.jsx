@@ -362,18 +362,26 @@ const Admin = () => {
                   <p className="text-sm text-muted-foreground">
                     Click on a match to update the score.
                   </p>
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={() => {
-                        if (confirm('Are you sure you want to regenerate the bracket? All progress will be lost.')) {
-                            generateBracket()
-                        }
-                    }}
-                  >
-                    <RefreshCcw className="mr-2 h-3 w-3" />
-                    Regenerate Bracket
-                  </Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="outline" size="sm">
+                        <RefreshCcw className="mr-2 h-3 w-3" />
+                        Regenerate Bracket
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle className="text-foreground">Are you absolutely sure?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          This action cannot be undone. This will permanently delete the current bracket and all match progress.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel className="text-foreground">Cancel</AlertDialogCancel>
+                        <AlertDialogAction className="bg-destructive hover:bg-destructive/90 text-destructive-foreground" onClick={generateBracket}>Continue</AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 </div>
                 <KnockoutBracket readOnly={false} />
               </div>
