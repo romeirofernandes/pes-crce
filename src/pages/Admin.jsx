@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTournamentStore } from '../store/tournamentStore'
 import KnockoutBracket from '../components/KnockoutBracket'
+import LeagueTable from '../components/LeagueTable'
+import LeagueFixtures from '../components/LeagueFixtures'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -20,7 +22,8 @@ import {
   RefreshCcw,
   UserPlus,
   Shield,
-  Trophy
+  Trophy,
+  TableProperties
 } from 'lucide-react'
 import {
   AlertDialog,
@@ -33,6 +36,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD || 'admin123'
 
@@ -53,9 +57,14 @@ const Admin = () => {
   const setFormat = useTournamentStore((state) => state.setFormat)
   const resetTournament = useTournamentStore((state) => state.resetTournament)
   const generateBracket = useTournamentStore((state) => state.generateBracket)
+  const setTournamentType = useTournamentStore((state) => state.setTournamentType)
+  const generateLeague = useTournamentStore((state) => state.generateLeague)
+  const updateLeagueMatch = useTournamentStore((state) => state.updateLeagueMatch)
 
   const activeFormat = data.activeFormat || '1v1'
   const currentBracket = data.brackets?.[activeFormat]
+  const currentLeague = data.leagues?.[activeFormat]
+  const currentType = data.tournamentTypes?.[activeFormat] || 'knockout'
 
   const handleLogin = (e) => {
     e.preventDefault()
@@ -76,6 +85,22 @@ const Admin = () => {
 
   const getPlayerName = (playerId) => {
     return data.players.find((p) => p.id === playerId)?.name || 'Unknown'
+  }
+
+  const getTeamName = (teamId) => {
+    if (!teamId) return 'TBD'
+    if (activeFormat === '2v2') {
+      const team = data.teams.find((t) => t.id === teamId)
+      if (!team) return 'TBD'
+      const playerNames = team.players
+        .map((pId) => data.players.find((p) => p.id === pId)?.name)
+        .filter(Boolean)
+        .join(' & ')
+      return playerNames || 'TBD'
+    } else {
+      const player = data.players.find((p) => p.id === teamId)
+      return player?.name || 'TBD'
+    }
   }
 
   const unselectedPlayers = data.players.filter(
@@ -140,6 +165,7 @@ const Admin = () => {
   }
 
   const competitorsCount = activeFormat === '2v2' ? data.teams.length : data.players.length
+  const competitors = activeFormat === '2v2' ? data.teams : data.players
 
   return (
     <main className="min-h-screen p-4 sm:p-6 lg:p-8 bg-background">
@@ -333,58 +359,132 @@ const Admin = () => {
            </div>
         </div>
 
-        {/* Bracket Management */}
+        {/* Tournament Management */}
         <Card>
-          <CardHeader>
-            <CardTitle>{activeFormat} Bracket Management</CardTitle>
-            <CardDescription>Generate the bracket and manage match scores</CardDescription>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+                <CardTitle>{activeFormat} Management</CardTitle>
+                <CardDescription>Manage tournament structure and matches</CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+                <Label>Format:</Label>
+                <Select value={currentType} onValueChange={(val) => setTournamentType(activeFormat, val)}>
+                    <SelectTrigger className="w-45">
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="knockout">Knockout</SelectItem>
+                        <SelectItem value="league">League (Round Robin)</SelectItem>
+                    </SelectContent>
+                </Select>
+            </div>
           </CardHeader>
           <CardContent>
-            {!currentBracket ? (
-              <div className="flex flex-col items-center gap-4 py-6">
-                <p className="text-muted-foreground text-center">
-                  {competitorsCount} {activeFormat === '2v2' ? 'teams' : 'players'} registered for {activeFormat}.
-                  {competitorsCount < 2 
-                    ? ' Need at least 2 to generate bracket.' 
-                    : ' Ready to start!'}
-                </p>
-                <Button 
-                  onClick={generateBracket} 
-                  disabled={competitorsCount < 2}
-                >
-                  <Trophy className="mr-2 h-4 w-4" />
-                  Generate {activeFormat} Bracket
-                </Button>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="flex justify-between items-center mb-4">
-                  <p className="text-sm text-muted-foreground">
-                    Click on a match to update the score.
-                  </p>
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button variant="outline" size="sm">
-                        <RefreshCcw className="mr-2 h-3 w-3" />
-                        Regenerate Bracket
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle className="text-foreground">Are you absolutely sure?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          This action cannot be undone. This will permanently delete the current bracket and all match progress.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel className="text-foreground">Cancel</AlertDialogCancel>
-                        <AlertDialogAction className="bg-destructive hover:bg-destructive/90 text-destructive-foreground" onClick={generateBracket}>Continue</AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
+            {currentType === 'knockout' ? (
+                // KNOCKOUT UI
+                !currentBracket ? (
+                <div className="flex flex-col items-center gap-4 py-6">
+                    <p className="text-muted-foreground text-center">
+                    {competitorsCount} {activeFormat === '2v2' ? 'teams' : 'players'} registered for {activeFormat}.
+                    {competitorsCount < 2 
+                        ? ' Need at least 2 to generate bracket.' 
+                        : ' Ready to start!'}
+                    </p>
+                    <Button 
+                    onClick={generateBracket} 
+                    disabled={competitorsCount < 2}
+                    >
+                    <Trophy className="mr-2 h-4 w-4" />
+                    Generate {activeFormat} Bracket
+                    </Button>
                 </div>
-                <KnockoutBracket readOnly={false} />
-              </div>
+                ) : (
+                <div className="space-y-4">
+                    <div className="flex justify-between items-center mb-4">
+                    <p className="text-sm text-muted-foreground">
+                        Click on a match to update the score.
+                    </p>
+                    <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                        <Button variant="outline" size="sm">
+                            <RefreshCcw className="mr-2 h-3 w-3" />
+                            Regenerate Bracket
+                        </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle className="text-foreground">Are you absolutely sure?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                            This action cannot be undone. This will permanently delete the current bracket and all match progress.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel className="text-foreground">Cancel</AlertDialogCancel>
+                            <AlertDialogAction className="bg-destructive hover:bg-destructive/90 text-destructive-foreground" onClick={generateBracket}>Continue</AlertDialogAction>
+                        </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
+                    </div>
+                    <KnockoutBracket readOnly={false} />
+                </div>
+                )
+            ) : (
+                // LEAGUE UI
+                !currentLeague ? (
+                    <div className="flex flex-col items-center gap-4 py-6">
+                        <p className="text-muted-foreground text-center">
+                        {competitorsCount} {activeFormat === '2v2' ? 'teams' : 'players'} registered for {activeFormat}.
+                        {competitorsCount < 2 
+                            ? ' Need at least 2 to generate league fixtures.' 
+                            : ' Ready to start league!'}
+                        </p>
+                        <Button 
+                        onClick={generateLeague} 
+                        disabled={competitorsCount < 2}
+                        >
+                        <TableProperties className="mr-2 h-4 w-4" />
+                        Generate League Fixtures
+                        </Button>
+                    </div>
+                ) : (
+                    <div className="space-y-8">
+                        <div>
+                            <div className="flex justify-between items-center mb-4">
+                                <h3 className="font-semibold text-lg">Standings</h3>
+                                <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                    <Button variant="outline" size="sm">
+                                        <RefreshCcw className="mr-2 h-3 w-3" />
+                                        Regenerate League
+                                    </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                        <AlertDialogTitle className="text-foreground">Are you absolutely sure?</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                        This action cannot be undone. This will permanently delete the current league fixtures and all match progress.
+                                        </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                        <AlertDialogCancel className="text-foreground">Cancel</AlertDialogCancel>
+                                        <AlertDialogAction className="bg-destructive hover:bg-destructive/90 text-destructive-foreground" onClick={generateLeague}>Continue</AlertDialogAction>
+                                    </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                </AlertDialog>
+                            </div>
+                            <LeagueTable matches={currentLeague.matches} competitors={competitors} getTeamName={getTeamName} />
+                        </div>
+                        <Separator />
+                        <div>
+                            <h3 className="font-semibold text-lg mb-4">Fixtures</h3>
+                            <LeagueFixtures 
+                                matches={currentLeague.matches} 
+                                getTeamName={getTeamName} 
+                                onUpdateMatch={updateLeagueMatch}
+                            />
+                        </div>
+                    </div>
+                )
             )}
           </CardContent>
         </Card>
@@ -401,16 +501,12 @@ const Admin = () => {
                 <p className="text-2xl font-bold">{data.players.length}</p>
               </div>
               <div className="space-y-1">
-                <p className="text-sm text-muted-foreground">Active View</p>
-                <p className="text-2xl font-bold">{activeFormat}</p>
+                <p className="text-sm text-muted-foreground">Active Format</p>
+                <p className="text-2xl font-bold uppercase">{activeFormat}</p>
               </div>
               <div className="space-y-1">
-                <p className="text-sm text-muted-foreground">
-                  {activeFormat === '2v2' ? 'Teams' : 'Competitors'}
-                </p>
-                <p className="text-2xl font-bold">
-                  {competitorsCount}
-                </p>
+                <p className="text-sm text-muted-foreground">Current Mode</p>
+                <p className="text-2xl font-bold capitalize">{currentType}</p>
               </div>
             </div>
           </CardContent>
@@ -436,7 +532,7 @@ const Admin = () => {
                 <AlertDialogHeader>
                   <AlertDialogTitle className="text-foreground">Are you absolutely sure?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    This will permanently reset the {activeFormat} tournament to default state. Players will remain, but bracket data will be lost. This action cannot be undone.
+                    This will permanently reset the {activeFormat} tournament to default state. Players will remain, but bracket AND league data will be lost. This action cannot be undone.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>

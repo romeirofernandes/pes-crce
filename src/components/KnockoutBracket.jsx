@@ -6,16 +6,31 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
-import { Trophy, Award } from 'lucide-react'
+import { Trophy, Award, ArrowLeftRight } from 'lucide-react'
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+  } from "@/components/ui/select"
 
 const KnockoutBracket = ({ readOnly = false, formatOverride }) => {
   const data = useTournamentStore((state) => state.data)
   const updateMatch = useTournamentStore((state) => state.updateMatch)
+  const updateBracketMatchCompetitor = useTournamentStore((state) => state.updateBracketMatchCompetitor)
+  
   const [editingMatch, setEditingMatch] = useState(null)
   const [scores, setScores] = useState({ home: '', away: '' })
   
+  // State for swapping competitors (only used if !readOnly)
+  const [swappingMatch, setSwappingMatch] = useState(null) // { roundIdx, matchIdx, slot: 'home'|'away' }
+  
   const currentFormat = formatOverride || data.activeFormat
   const bracket = data.brackets?.[currentFormat]
+  
+  // Gather all players/teams for swap dropdown
+  const allCompetitors = currentFormat === '2v2' ? data.teams : data.players
 
   if (!bracket) {
     return (
@@ -46,9 +61,11 @@ const KnockoutBracket = ({ readOnly = false, formatOverride }) => {
 
   const handleMatchClick = (roundIdx, matchIdx) => {
     if (readOnly) return
+    if (swappingMatch) return // Don't open score editor if swapping
+    
     const match = bracket.rounds[roundIdx][matchIdx]
     
-    // Can only edit matches that have both competitors assigned
+    // Can only edit matches that have both competitors assigned (unless it's just swapping which is handled separately)
     if (!match.home || !match.away || match.bye) return
     
     setEditingMatch({ roundIdx, matchIdx })
@@ -92,6 +109,18 @@ const KnockoutBracket = ({ readOnly = false, formatOverride }) => {
     }
     return null
   }
+  
+  // Swap Logic
+  const initiateSwap = (roundIdx, matchIdx, slot) => {
+      setSwappingMatch({ roundIdx, matchIdx, slot })
+  }
+  
+  const handleSwapChange = (newCompetitorId) => {
+      if (swappingMatch) {
+          updateBracketMatchCompetitor(swappingMatch.roundIdx, swappingMatch.matchIdx, swappingMatch.slot, newCompetitorId)
+          setSwappingMatch(null)
+      }
+  }
 
   const winner = getWinner()
 
@@ -128,6 +157,11 @@ const KnockoutBracket = ({ readOnly = false, formatOverride }) => {
                   const isWinner = (teamId) => match.winner === teamId
                   const canEdit = !readOnly && match.home && match.away && !match.bye
                   
+                  // Allow swapping if it's Round 0 (to fix initial setup) or if admin really wants to force it.
+                  // For "fairness", only Round 0 is truly safe to swap arbitrarily without breaking propagation logic 
+                  // unless we re-propagate. The store now handles re-propagation for completed matches.
+                  const allowSwap = !readOnly && !match.bye
+                  
                   return (
                     <div key={match.id} className="relative flex items-center">
                     
@@ -140,9 +174,51 @@ const KnockoutBracket = ({ readOnly = false, formatOverride }) => {
                       onClick={() => canEdit && !isEditing && handleMatchClick(roundIdx, matchIdx)}
                     >
                       {match.bye ? (
-                        <CardContent className="p-4">
-                          <Badge variant="outline" className="mb-2">BYE</Badge>
-                          <p className="text-sm font-semibold">{getTeamName(match.home)}</p>
+                        <CardContent className="p-4 flex flex-col justify-between h-full">
+                          <div className="flex justify-between items-start mb-2">
+                             <Badge variant="outline">BYE</Badge>
+                          </div>
+                          
+                          <div className="flex items-center justify-between gap-2">
+                                {!readOnly && swappingMatch?.roundIdx === roundIdx && swappingMatch?.matchIdx === matchIdx && swappingMatch?.slot === 'home' ? (
+                                    <div className="flex-1 mr-2" onClick={e => e.stopPropagation()}>
+                                        <Select 
+                                            value={match.home} 
+                                            onValueChange={handleSwapChange}
+                                            open={true}
+                                            onOpenChange={(open) => !open && setSwappingMatch(null)}
+                                        >
+                                            <SelectTrigger className="h-7 text-xs w-full">
+                                                <SelectValue placeholder="Select player" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {allCompetitors.map(c => (
+                                                    <SelectItem key={c.id} value={c.id}>
+                                                        {currentFormat === '2v2' ? c.players.join('&') : c.name}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                ) : (
+                                    <p className="text-sm font-semibold truncate">{getTeamName(match.home)}</p>
+                                )}
+
+                                {!readOnly && !swappingMatch && (
+                                     <Button 
+                                         variant="ghost" 
+                                         size="icon" 
+                                         className="h-6 w-6 ml-1 shrink-0"
+                                         onClick={(e) => {
+                                             e.stopPropagation()
+                                             initiateSwap(roundIdx, matchIdx, 'home')
+                                         }}
+                                         title="Swap competitor"
+                                     >
+                                         <ArrowLeftRight className="h-3 w-3 text-muted-foreground" />
+                                     </Button>
+                                )}
+                          </div>
                         </CardContent>
                       ) : isEditing ? (
                         <CardContent className="p-4 space-y-3">
@@ -206,34 +282,117 @@ const KnockoutBracket = ({ readOnly = false, formatOverride }) => {
                         </CardContent>
                       ) : (
                         <CardContent className="p-0">
+                          {/* Home Competitor Row */}
                           <div className={`p-3 border-b flex items-center justify-between transition-colors ${
                             isWinner(match.home) 
                               ? 'bg-primary/10 font-semibold' 
                               : 'hover:bg-muted/50'
                           }`}>
-                            <span className={`text-sm truncate flex items-center gap-2 ${
-                              !match.home ? 'text-muted-foreground italic' : ''
-                            }`}>
-                              {getTeamName(match.home)}
-                              {isWinner(match.home) && <Award className="w-4 h-4 text-primary" />}
-                            </span>
+                            <div className="flex items-center gap-2 flex-1 min-w-0">
+                                {allowSwap && swappingMatch?.roundIdx === roundIdx && swappingMatch?.matchIdx === matchIdx && swappingMatch?.slot === 'home' ? (
+                                    <div className="flex-1 mr-2" onClick={e => e.stopPropagation()}>
+                                        <Select 
+                                            value={match.home} 
+                                            onValueChange={handleSwapChange}
+                                            open={true}
+                                            onOpenChange={(open) => !open && setSwappingMatch(null)}
+                                        >
+                                            <SelectTrigger className="h-7 text-xs w-full">
+                                                <SelectValue placeholder="Select player" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {allCompetitors.map(c => (
+                                                    <SelectItem key={c.id} value={c.id}>
+                                                        {currentFormat === '2v2' ? c.players.join('&') : c.name}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                ) : (
+                                    <span className={`text-sm truncate flex items-center gap-2 ${
+                                        !match.home ? 'text-muted-foreground italic' : ''
+                                    }`}>
+                                        {getTeamName(match.home)}
+                                        {isWinner(match.home) && <Award className="w-4 h-4 text-primary" />}
+                                    </span>
+                                )}
+                                
+                                {allowSwap && !swappingMatch && (
+                                    <Button 
+                                        variant="ghost" 
+                                        size="icon" 
+                                        className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity ml-1"
+                                        onClick={(e) => {
+                                            e.stopPropagation()
+                                            initiateSwap(roundIdx, matchIdx, 'home')
+                                        }}
+                                        title="Swap competitor"
+                                    >
+                                        <ArrowLeftRight className="h-3 w-3 text-muted-foreground" />
+                                    </Button>
+                                )}
+                            </div>
+                            
                             {isCompleted && match.homeScore !== null && (
                               <Badge variant={isWinner(match.home) ? "default" : "secondary"}>
                                 {match.homeScore}
                               </Badge>
                             )}
                           </div>
+                          
+                          {/* Away Competitor Row */}
                           <div className={`p-3 flex items-center justify-between transition-colors ${
                             isWinner(match.away) 
                               ? 'bg-primary/10 font-semibold' 
                               : 'hover:bg-muted/50'
                           }`}>
-                            <span className={`text-sm truncate flex items-center gap-2 ${
-                              !match.away ? 'text-muted-foreground italic' : ''
-                            }`}>
-                              {getTeamName(match.away)}
-                              {isWinner(match.away) && <Award className="w-4 h-4 text-primary" />}
-                            </span>
+                            <div className="flex items-center gap-2 flex-1 min-w-0">
+                                {allowSwap && swappingMatch?.roundIdx === roundIdx && swappingMatch?.matchIdx === matchIdx && swappingMatch?.slot === 'away' ? (
+                                    <div className="flex-1 mr-2" onClick={e => e.stopPropagation()}>
+                                        <Select 
+                                            value={match.away} 
+                                            onValueChange={handleSwapChange}
+                                            open={true}
+                                            onOpenChange={(open) => !open && setSwappingMatch(null)}
+                                        >
+                                            <SelectTrigger className="h-7 text-xs w-full">
+                                                <SelectValue placeholder="Select player" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {allCompetitors.map(c => (
+                                                    <SelectItem key={c.id} value={c.id}>
+                                                        {currentFormat === '2v2' ? c.players.join('&') : c.name}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                ) : (
+                                    <span className={`text-sm truncate flex items-center gap-2 ${
+                                        !match.away ? 'text-muted-foreground italic' : ''
+                                    }`}>
+                                        {getTeamName(match.away)}
+                                        {isWinner(match.away) && <Award className="w-4 h-4 text-primary" />}
+                                    </span>
+                                )}
+                                
+                                {allowSwap && !swappingMatch && (
+                                    <Button 
+                                        variant="ghost" 
+                                        size="icon" 
+                                        className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity ml-1"
+                                        onClick={(e) => {
+                                            e.stopPropagation()
+                                            initiateSwap(roundIdx, matchIdx, 'away')
+                                        }}
+                                        title="Swap competitor"
+                                    >
+                                        <ArrowLeftRight className="h-3 w-3 text-muted-foreground" />
+                                    </Button>
+                                )}
+                            </div>
+
                             {isCompleted && match.awayScore !== null && (
                               <Badge variant={isWinner(match.away) ? "default" : "secondary"}>
                                 {match.awayScore}
