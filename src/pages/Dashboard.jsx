@@ -53,13 +53,10 @@ const Dashboard = () => {
     <main className="min-h-screen p-4 sm:p-6 lg:p-8 bg-background">
       <div className="max-w-5xl mx-auto space-y-6">
         <header className="flex flex-col gap-4">
-            <div className="flex items-center justify-between">
-            <div>
+            <div className="flex flex-col md:flex-row gap-6 items-center justify-between">
                 <h1 className="text-3xl sm:text-4xl font-bold text-primary">
                 Who's the best PES player in CRCE?
                 </h1>
-              
-            </div>
             <div className="flex items-center gap-2">
               <div className="inline-flex items-center rounded-md bg-transparent p-0">
                 <Button
@@ -83,7 +80,7 @@ const Dashboard = () => {
               <Button 
                 variant="default" 
                 size="sm"
-                className="h-10 rounded-full px-3 text-foreground text-md border border-accent bg-background hover:bg-accent hover:text-accent-foreground ml-2"
+                className="h-10 rounded-md px-3 text-foreground text-md border border-accent bg-background hover:bg-accent hover:text-accent-foreground ml-2"
                 onClick={toggleMode}
               >
                 {activeMode === 'league' ? (
